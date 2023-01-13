@@ -1,45 +1,36 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"log"
 )
 
 func main() {
 
-	var token string = "5859735143:AAGFvrZyYDwF7RlOkrca4Ekfx8rPpJJQU9k"
-	var url = "https://api.telegram.org/bot" + token
+	bot, err := tgbotapi.NewBotAPI("5859735143:AAGFvrZyYDwF7RlOkrca4Ekfx8rPpJJQU9k")
+	if err != nil {
+		log.Panic(fmt.Errorf("Authorization failed", err))
+		panic(err)
+	}
 
-	for {
-		ans, err := getUpdate(url)
-		if err != nil {
-			fmt.Println(err)
+	log.Println("Authorization was successful")
+
+	bot.Debug = true
+
+	updateConfig := tgbotapi.NewUpdate(0)
+	updateConfig.Timeout = 60
+
+	updates := bot.GetUpdatesChan(updateConfig)
+
+	for update := range updates {
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+		if _, sendError := bot.Send(msg); sendError != nil {
+			log.Panic(fmt.Errorf("Send message failed", sendError))
+			panic(sendError)
 		}
-		fmt.Println(ans)
 	}
-
 }
 
-func getUpdate(url string) ([]UpdateModel, error) {
 
-	update, err := http.Get(url + "/getUpdates")
-	if err != nil {
-		return nil, err
-	}
-
-	defer update.Body.Close()
-
-	date, err := io.ReadAll(update.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var res Request
-
-	if err := json.Unmarshal(date, &res); err != nil {
-		return nil, err
-	}
-	return res.Result, nil
-}
