@@ -66,8 +66,10 @@ func main() {
 
 		category, sum, cur := stringParser(wordList)
 
+		sumRub := fixerAPI(cur, sum)
+
 		// Отправка ответного сообщения
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Категория покупки - %s ", update.Message.From.UserName, sum, cur, category))
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях: %d. Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
 		if _, sendError := bot.Send(msg); sendError != nil {
 			log.Panic(fmt.Errorf("send message failed: %v", sendError))
 		}
@@ -93,6 +95,8 @@ func stringParser(str []string) (category, sum, cur string) {
 
 func fixerAPI(cur, sum string) int {
 
+	key := os.Getenv("FIXER")
+
 	URL := fmt.Sprintf("https://api.apilayer.com/fixer/convert?to=RUB&from=%s&amount=%s", cur, sum)
 
 	client := &http.Client{}
@@ -102,7 +106,7 @@ func fixerAPI(cur, sum string) int {
 		log.Println(err)
 	}
 
-	req.Header.Set("apikey", "rd8XN7uKMiFl6k9fXUMFt3TqEsF1EJhb")
+	req.Header.Set("apikey", key)
 
 	res, err := client.Do(req)
 	if res.Body != nil {
@@ -110,18 +114,12 @@ func fixerAPI(cur, sum string) int {
 	}
 	body, err := io.ReadAll(res.Body)
 
-	fmt.Println(string(body))
-	fmt.Println(body)
-
 	var fixerJSON FixerJSON
 
 	unmarshalErr := json.Unmarshal(body, &fixerJSON)
 	if unmarshalErr != nil {
 		log.Println(unmarshalErr)
 	}
-	fmt.Println(fixerJSON)
-	fmt.Printf("Результат: %d", int(fixerJSON.Result))
-	fmt.Println()
 
 	return int(fixerJSON.Result)
 }
