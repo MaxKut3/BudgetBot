@@ -3,17 +3,28 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	godotenv "github.com/joho/godotenv"
 )
 
 func main() {
 
-	bot, err := tgbotapi.NewBotAPI("5859735143:AAGFvrZyYDwF7RlOkrca4Ekfx8rPpJJQU9k")
+	// Блок подключения к Боту
+
+	err := godotenv.Load(".env")
 	if err != nil {
-		log.Panic(fmt.Errorf("authorization failed", err))
+		log.Fatalf("Some error occured. Err: %s", err)
+	}
+
+	val := os.Getenv("KEY")
+
+	bot, err := tgbotapi.NewBotAPI(val)
+	if err != nil {
+		log.Panic(fmt.Errorf("authorization failed: %v", err))
 		panic(err)
 	}
 
@@ -26,46 +37,53 @@ func main() {
 
 	updates := bot.GetUpdatesChan(updateConfig)
 
+	// Блок обработки сообщений
+
 	for update := range updates {
 
-		res, parsError := stringParsing(update.Message.Text)
-		if parsError != nil {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка")
+		// Проверка строки на валидность
+		wordList := strings.Split(update.Message.Text, " ")
+		fmt.Println(wordList)
+
+		if len(wordList) != 2 {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
 			if _, sendError := bot.Send(msg); sendError != nil {
-				fmt.Errorf("Send message failed", sendError)
+				log.Println(fmt.Errorf("send message failed: %v", sendError))
 			}
-			panic(parsError)
+			continue
 		}
 
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s ", update.Message.From.UserName, res[0], res[1]))
-		//msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+		if matched, _ := regexp.MatchString("[A-z]", wordList[1]); matched != true {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
+			if _, sendError := bot.Send(msg); sendError != nil {
+				log.Println(fmt.Errorf("send message failed: %v", sendError))
+			}
+			continue
+		}
+
+		category, sum, cur := stringParser(wordList)
+
+		// Отправка ответного сообщения
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Категория покупки - %s ", update.Message.From.UserName, sum, cur, category))
 		if _, sendError := bot.Send(msg); sendError != nil {
-			log.Panic(fmt.Errorf("Send message failed", sendError))
-			panic(sendError)
+			log.Panic(fmt.Errorf("send message failed: %v", sendError))
 		}
 	}
 }
 
-// Извлечение суммы, валюты, продукта из сообщения
-func stringParsing(text string) ([]string, error) {
+func stringParser(str []string) (category, sum, cur string) {
 
-	msgList := strings.Split(text, " ")
-	re, _ := regexp.Compile("[a-z]")
-
-	//Проверка на валидность
-	if matched, matchedError := regexp.MatchString("[a-z]", msgList[len(msgList)-1]); matched != true {
-		return nil, fmt.Errorf("Невалидная строка", matchedError)
+	re, err := regexp.Compile("[A-z]")
+	if err != nil {
+		log.Println(err)
 	}
 
-	listInd := re.FindStringIndex(msgList[len(msgList)-1])
-	fmt.Println(listInd)
-
+	listInd := re.FindStringIndex(str[1])
 	i := listInd[0]
 
-	res := make([]string, 2, 2)
-	res[0] = msgList[len(msgList)-1][:i] //сумма
-	res[1] = msgList[len(msgList)-1][i:] //валюта
+	category = str[0]
+	sum = str[1][:i]
+	cur = str[1][i:]
 
-	return res, nil
-
+	return category, sum, cur
 }
