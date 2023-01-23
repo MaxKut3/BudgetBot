@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -86,4 +89,39 @@ func stringParser(str []string) (category, sum, cur string) {
 	cur = str[1][i:]
 
 	return category, sum, cur
+}
+
+func fixerAPI(cur, sum string) int {
+
+	URL := fmt.Sprintf("https://api.apilayer.com/fixer/convert?to=RUB&from=%s&amount=%s", cur, sum)
+
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", URL, nil)
+	if err != nil {
+		log.Println(err)
+	}
+
+	req.Header.Set("apikey", "rd8XN7uKMiFl6k9fXUMFt3TqEsF1EJhb")
+
+	res, err := client.Do(req)
+	if res.Body != nil {
+		defer res.Body.Close()
+	}
+	body, err := io.ReadAll(res.Body)
+
+	fmt.Println(string(body))
+	fmt.Println(body)
+
+	var fixerJSON FixerJSON
+
+	unmarshalErr := json.Unmarshal(body, &fixerJSON)
+	if unmarshalErr != nil {
+		log.Println(unmarshalErr)
+	}
+	fmt.Println(fixerJSON)
+	fmt.Printf("Результат: %d", int(fixerJSON.Result))
+	fmt.Println()
+
+	return int(fixerJSON.Result)
 }
