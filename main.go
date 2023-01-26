@@ -1,14 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	godotenv "github.com/joho/godotenv"
@@ -24,8 +22,11 @@ func main() {
 	}
 
 	val := os.Getenv("KEY")
+	fixer := os.Getenv("FIXER")
+	exchangerates := os.Getenv("EXCHANGERATES")
 
 	bot, err := tgbotapi.NewBotAPI(val)
+
 	if err != nil {
 		log.Panic(fmt.Errorf("authorization failed: %v", err))
 		panic(err)
@@ -56,6 +57,14 @@ func main() {
 			continue
 		}
 
+		if matched, _ := regexp.MatchString("[0-9]", wordList[1]); matched != true {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
+			if _, sendError := bot.Send(msg); sendError != nil {
+				log.Println(fmt.Errorf("send message failed: %v", sendError))
+			}
+			continue
+		}
+
 		if matched, _ := regexp.MatchString("[A-z]", wordList[1]); matched != true {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
 			if _, sendError := bot.Send(msg); sendError != nil {
@@ -66,22 +75,37 @@ func main() {
 
 		category, sum, cur := stringParser(wordList)
 
-		sumRub := fixerAPI(cur, sum)
+		var wg sync.WaitGroup
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			fmt.Println("fixer", fixerAPI(cur, fixer))
+		}()
+
+		go func() {
+			defer wg.Done()
+			fmt.Println("coinGAteAPI", coinGAteAPI(cur))
+		}()
+
+		go func() {
+			defer wg.Done()
+			fmt.Println("exchangeratesAPI", exchangeratesAPI(cur, exchangerates))
+		}()
+
+		wg.Wait()
 
 		// Отправка ответного сообщения
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях: %d. Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Категория покупки - %s ", update.Message.From.UserName, sum, cur, category))
 		if _, sendError := bot.Send(msg); sendError != nil {
 			log.Panic(fmt.Errorf("send message failed: %v", sendError))
 		}
 	}
 }
 
-func stringParser(str []string) (category, sum, cur string) {
+var re, _ = regexp.Compile("[A-z]")
 
-	re, err := regexp.Compile("[A-z]")
-	if err != nil {
-		log.Println(err)
-	}
+func stringParser(str []string) (category, sum, cur string) {
 
 	listInd := re.FindStringIndex(str[1])
 	i := listInd[0]
@@ -91,35 +115,4 @@ func stringParser(str []string) (category, sum, cur string) {
 	cur = str[1][i:]
 
 	return category, sum, cur
-}
-
-func fixerAPI(cur, sum string) int {
-
-	key := os.Getenv("FIXER")
-
-	URL := fmt.Sprintf("https://api.apilayer.com/fixer/convert?to=RUB&from=%s&amount=%s", cur, sum)
-
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", URL, nil)
-	if err != nil {
-		log.Println(err)
-	}
-
-	req.Header.Set("apikey", key)
-
-	res, err := client.Do(req)
-	if res.Body != nil {
-		defer res.Body.Close()
-	}
-	body, err := io.ReadAll(res.Body)
-
-	var fixerJSON FixerJSON
-
-	unmarshalErr := json.Unmarshal(body, &fixerJSON)
-	if unmarshalErr != nil {
-		log.Println(unmarshalErr)
-	}
-
-	return int(fixerJSON.Result)
 }
