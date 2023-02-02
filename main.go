@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	godotenv "github.com/joho/godotenv"
 	"log"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	godotenv "github.com/joho/godotenv"
 )
 
 func main() {
@@ -78,22 +77,34 @@ func main() {
 		var wg sync.WaitGroup
 		wg.Add(3)
 
+		ch := make(chan int)
+
 		go func() {
 			defer wg.Done()
-			fmt.Println("fixer", fixerAPI(cur, fixer))
+			//fmt.Println("fixer", fixerAPI(cur, fixer))
+			ch <- fixerAPI(cur, fixer)
 		}()
 
 		go func() {
 			defer wg.Done()
-			fmt.Println("coinGAteAPI", coinGAteAPI(cur))
+			//fmt.Println("coinGAteAPI", coinGAteAPI(cur))
+			ch <- coinGAteAPI(cur)
 		}()
 
 		go func() {
 			defer wg.Done()
-			fmt.Println("exchangeratesAPI", exchangeratesAPI(cur, exchangerates))
+			//fmt.Println("exchangeratesAPI", exchangeratesAPI(cur, exchangerates))
+			ch <- exchangeratesAPI(cur, exchangerates)
 		}()
 
-		wg.Wait()
+		go func() {
+			wg.Wait()
+			close(ch)
+		}()
+
+		for rate := range ch {
+			fmt.Println(rate)
+		}
 
 		// Отправка ответного сообщения
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Категория покупки - %s ", update.Message.From.UserName, sum, cur, category))

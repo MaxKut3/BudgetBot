@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 func fixerAPI(cur, key string) int {
@@ -35,10 +36,10 @@ func fixerAPI(cur, key string) int {
 		log.Println(unmarshalErr)
 	}
 
-	return int(fixerJSON.Result)
+	return int(fixerJSON.Result * 100)
 }
 
-func coinGAteAPI(cur string) string {
+func coinGAteAPI(cur string) int {
 
 	url := fmt.Sprintf("https://api.coingate.com/api/v2/rates/merchant/%s/RUB", cur)
 
@@ -50,11 +51,11 @@ func coinGAteAPI(cur string) string {
 
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
-
-	return string(body)
+	exchangeRate, _ := strconv.ParseFloat(string(body), 64)
+	return int(exchangeRate * 100)
 }
 
-func exchangeratesAPI(cur, key string) float64 {
+func exchangeratesAPI(cur, key string) int {
 
 	url := fmt.Sprintf("https://api.apilayer.com/exchangerates_data/convert?to=RUB&from=%s&amount=1", cur)
 
@@ -78,5 +79,5 @@ func exchangeratesAPI(cur, key string) float64 {
 		log.Println(errUnmarsh)
 	}
 
-	return exchangeratesJSON.Result
+	return int(exchangeratesJSON.Result * 100)
 }
