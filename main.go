@@ -59,16 +59,16 @@ func main() {
 
 			category, sum, cur := stringParser(wordList)
 			sumInt, _ := strconv.Atoi(sum)
-			var sumRub float64
+			var sumRub int
 
 			if cahVal, ok := cache[cur]; ok {
-				sumRub = float64(cahVal*sumInt) / 100
+				sumRub = cahVal * sumInt / 100
 			} else {
-				sumRub = float64(getValue(cur)*sumInt) / 100
+				sumRub = getValue(cur) * sumInt / 100
 				cache[cur] = getValue(cur)
 			}
 
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях - %f . Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях - %d . Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
 			if _, sendError := bot.Send(msg); sendError != nil {
 				log.Panic(fmt.Errorf("send message failed: %v", sendError))
 			}
