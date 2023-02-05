@@ -2,33 +2,34 @@ package main
 
 import (
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	godotenv "github.com/joho/godotenv"
 	"log"
 	"os"
+	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	godotenv "github.com/joho/godotenv"
 )
 
-func main() {
-
-	// Блок подключения к Боту
-
+func init() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Some error occured. Err: %s", err)
 	}
+}
+
+func main() {
 
 	val := os.Getenv("KEY")
-	fixer := os.Getenv("FIXER")
-	exchangerates := os.Getenv("EXCHANGERATES")
 
 	bot, err := tgbotapi.NewBotAPI(val)
 
 	if err != nil {
 		log.Panic(fmt.Errorf("authorization failed: %v", err))
-		panic(err)
 	}
 
 	log.Println("Authorization was successful")
@@ -40,78 +41,48 @@ func main() {
 
 	updates := bot.GetUpdatesChan(updateConfig)
 
-	// Блок обработки сообщений
+	cache := make(map[string]int)
 
-	for update := range updates {
+	go func() {
 
-		// Проверка строки на валидность
-		wordList := strings.Split(update.Message.Text, " ")
-		fmt.Println(wordList)
+		for update := range updates {
 
-		if len(wordList) != 2 {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
-			if _, sendError := bot.Send(msg); sendError != nil {
-				log.Println(fmt.Errorf("send message failed: %v", sendError))
+			wordList := strings.Split(update.Message.Text, " ")
+
+			if validateMessageText(wordList) != true {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
+				if _, sendError := bot.Send(msg); sendError != nil {
+					log.Println(fmt.Errorf("send message failed: %v", sendError))
+				}
+				continue
 			}
-			continue
-		}
 
-		if matched, _ := regexp.MatchString("[0-9]", wordList[1]); matched != true {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
-			if _, sendError := bot.Send(msg); sendError != nil {
-				log.Println(fmt.Errorf("send message failed: %v", sendError))
+			category, sum, cur := stringParser(wordList)
+			sumInt, _ := strconv.Atoi(sum)
+			var sumRub float64
+
+			if cahVal, ok := cache[cur]; ok {
+				sumRub = float64(cahVal*sumInt) / 100
+			} else {
+				sumRub = float64(getValue(cur)*sumInt) / 100
+				cache[cur] = getValue(cur)
 			}
-			continue
-		}
 
-		if matched, _ := regexp.MatchString("[A-z]", wordList[1]); matched != true {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях - %f . Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
 			if _, sendError := bot.Send(msg); sendError != nil {
-				log.Println(fmt.Errorf("send message failed: %v", sendError))
+				log.Panic(fmt.Errorf("send message failed: %v", sendError))
 			}
-			continue
 		}
 
-		category, sum, cur := stringParser(wordList)
+	}()
 
-		var wg sync.WaitGroup
-		wg.Add(3)
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-signalChan
 
-		ch := make(chan int)
+	log.Printf("%s signal caught", sig)
 
-		go func() {
-			defer wg.Done()
-			//fmt.Println("fixer", fixerAPI(cur, fixer))
-			ch <- fixerAPI(cur, fixer)
-		}()
-
-		go func() {
-			defer wg.Done()
-			//fmt.Println("coinGAteAPI", coinGAteAPI(cur))
-			ch <- coinGAteAPI(cur)
-		}()
-
-		go func() {
-			defer wg.Done()
-			//fmt.Println("exchangeratesAPI", exchangeratesAPI(cur, exchangerates))
-			ch <- exchangeratesAPI(cur, exchangerates)
-		}()
-
-		go func() {
-			wg.Wait()
-			close(ch)
-		}()
-
-		for rate := range ch {
-			fmt.Println(rate)
-		}
-
-		// Отправка ответного сообщения
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Категория покупки - %s ", update.Message.From.UserName, sum, cur, category))
-		if _, sendError := bot.Send(msg); sendError != nil {
-			log.Panic(fmt.Errorf("send message failed: %v", sendError))
-		}
-	}
+	bot.StopReceivingUpdates()
 }
 
 var re, _ = regexp.Compile("[A-z]")
@@ -126,4 +97,54 @@ func stringParser(str []string) (category, sum, cur string) {
 	cur = str[1][i:]
 
 	return category, sum, cur
+}
+
+func validateMessageText(wordList []string) bool {
+	if len(wordList) != 2 {
+		return false
+	}
+	if matched, _ := regexp.MatchString("[0-9]", wordList[1]); matched != true {
+		return false
+	}
+	if matched, _ := regexp.MatchString("[A-z]", wordList[1]); matched != true {
+		return false
+	}
+	return true
+}
+
+type getCurValueFunc func(cur, key string) int
+
+func getValue(cur string) int {
+
+	providers := map[string]getCurValueFunc{
+		"No key":                   coinGAteAPI,
+		os.Getenv("FIXER"):         fixerAPI,
+		os.Getenv("EXCHANGERATES"): exchangeratesAPI,
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(providers))
+
+	ch := make(chan int)
+
+	max := 0
+
+	for key, provider := range providers {
+		go func() {
+			defer wg.Done()
+			ch <- provider(cur, key)
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for val := range ch {
+		if val > max {
+			max = val
+		}
+	}
+	return max
 }
