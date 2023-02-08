@@ -45,3 +45,59 @@ func TestStringParser(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateMessageText(t *testing.T) {
+	type args struct {
+		wordList []string
+	}
+
+	tests := []struct {
+		name  string
+		args  args
+		wants bool
+	}{
+		{
+			name: "Test 1",
+			args: args{
+				[]string{"Магнит", "Продукты", "1000Rub"},
+			},
+			wants: false,
+		},
+		{
+			name: "Test 2",
+			args: args{
+				[]string{"Продукты", "1000Rub"},
+			},
+			wants: true,
+		},
+		{
+			name: "Test 3",
+			args: args{
+				[]string{"Продукты", "Rub"},
+			},
+			wants: false,
+		},
+		{
+			name: "Test 4",
+			args: args{
+				[]string{"Продукты", "1000Rub"},
+			},
+			wants: true,
+		},
+		{
+			name: "Test 5",
+			args: args{
+				[]string{"Продукты", "1000Руб"},
+			},
+			wants: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := validateMessageText(tt.args.wordList)
+			if res != tt.wants {
+				t.Errorf("%s: fail \n", tt.name)
+			}
+		})
+	}
+}

@@ -15,6 +15,8 @@ import (
 	godotenv "github.com/joho/godotenv"
 )
 
+var cache = make(map[string]int)
+
 func init() {
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -41,8 +43,6 @@ func main() {
 
 	updates := bot.GetUpdatesChan(updateConfig)
 
-	cache := make(map[string]int)
-
 	go func() {
 
 		for update := range updates {
@@ -59,14 +59,13 @@ func main() {
 
 			category, sum, cur := stringParser(wordList)
 			sumInt, _ := strconv.Atoi(sum)
-			var sumRub int
+			sumRub := 0
 
-			if cahVal, ok := cache[cur]; ok {
-				sumRub = cahVal * sumInt / 100
-			} else {
-				sumRub = getValue(cur) * sumInt / 100
+			if _, ok := cache[cur]; !ok {
 				cache[cur] = getValue(cur)
 			}
+
+			sumRub = cache[cur] * sumInt / 100
 
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %s, в следующей валюте: %s. Сумма в рублях - %d . Категория покупки - %s ", update.Message.From.UserName, sum, cur, sumRub, category))
 			if _, sendError := bot.Send(msg); sendError != nil {
@@ -130,6 +129,7 @@ func getValue(cur string) int {
 	max := 0
 
 	for key, provider := range providers {
+		key := key
 		go func() {
 			defer wg.Done()
 			ch <- provider(cur, key)
