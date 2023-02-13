@@ -3,7 +3,7 @@
 run:
 	gofmt -w .
 	goimports -w .
-	go run .
+	go run cmd/BudgetBot/main.go
 
 tests:
 	gofmt -w .

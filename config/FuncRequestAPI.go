@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -39,7 +39,7 @@ func fixerAPI(cur, key string) int {
 	return int(fixerJSON.Result * 100)
 }
 
-func coinGAteAPI(cur, key string) int {
+func coinGateAPI(cur, key string) int {
 
 	url := fmt.Sprintf("https://api.coingate.com/api/v2/rates/merchant/%s/RUB", cur)
 

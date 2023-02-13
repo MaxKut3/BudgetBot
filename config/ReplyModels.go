@@ -1,4 +1,4 @@
-package main
+package config
 
 type FixerJSON struct {
 	Success bool    `json:"success"`
