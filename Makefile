@@ -22,5 +22,8 @@ imports:
 lint:
 	golangci-lint run main.go
 
+mig-status:
+	GOOSE_DRIVER=postgres GOOSE_DBSTRING="user=postgres password=postgres dbname=postgres sslmode=disable host=localhost port=5434" goose -dir migrations up
 
-
+docker:
+	docker-compose up

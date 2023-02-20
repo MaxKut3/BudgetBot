@@ -6,18 +6,20 @@ import (
 	"os/signal"
 	"syscall"
 
+	postgres "github.com/MaxKut3/BudgetBot/internal/useCases/repositories"
+
 	"github.com/MaxKut3/BudgetBot/config"
 	"github.com/MaxKut3/BudgetBot/internal/controller"
-	"github.com/MaxKut3/BudgetBot/internal/useCases"
+	"github.com/MaxKut3/BudgetBot/internal/useCases/useCaseCurrency"
 	"github.com/MaxKut3/BudgetBot/pkg"
 )
 
 func Run(cfg *config.TgBotConfig) {
 
 	cache := pkg.NewSimpleCache()
-	currency := useCases.NewCurrencyStr(cfg)
-
-	client := controller.NewTgBot(cfg, cache, currency)
+	currency := useCaseCurrency.NewCurrencyStr(cfg)
+	rep := postgres.NewRepository(cfg)
+	client := controller.NewTgBot(cfg, cache, currency, rep) // Ошибка с интерфейсом кэша
 
 	go client.Run()
 

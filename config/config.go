@@ -4,14 +4,15 @@ import (
 	"log"
 	"os"
 
+	"github.com/jackc/pgx"
+
 	"github.com/joho/godotenv"
 )
 
-type GetCurRate func(cur, key string) int
-
 type TgBotConfig struct {
 	Key       string
-	Providers map[string]GetCurRate
+	Providers map[string]string
+	Connect   pgx.ConnConfig
 }
 
 func NewTgBotConfig() *TgBotConfig {
@@ -23,10 +24,19 @@ func NewTgBotConfig() *TgBotConfig {
 
 	return &TgBotConfig{
 		Key: os.Getenv("KEY"),
-		Providers: map[string]GetCurRate{
-			"coinGAteAPI":              coinGateAPI,
-			os.Getenv("FIXER"):         fixerAPI,
-			os.Getenv("EXCHANGERATES"): exchangeratesAPI,
+
+		Providers: map[string]string{
+			"https://api.apilayer.com/fixer/convert?to=RUB&from=%s&amount=1":              os.Getenv("FIXER"),
+			"https://api.apilayer.com/exchangerates_data/convert?to=RUB&from=%s&amount=1": os.Getenv("EXCHANGERATES"),
+		},
+
+		Connect: pgx.ConnConfig{
+			Host:     "localhost",
+			Port:     5434,
+			User:     "postgres",
+			Password: os.Getenv("DBKEY"),
+			Database: "postgres",
 		},
 	}
+
 }

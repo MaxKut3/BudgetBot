@@ -3,12 +3,9 @@ package controller
 import (
 	"fmt"
 	"log"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/MaxKut3/BudgetBot/config"
-	"github.com/MaxKut3/BudgetBot/internal/Message"
+	"github.com/MaxKut3/BudgetBot/internal/models"
 	"github.com/MaxKut3/BudgetBot/pkg"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -22,20 +19,25 @@ type Currency interface {
 	GetValue(cur string) int
 }
 
-/*
-type Cache interface {
-	Get(msg *Message.Message) (int, bool)
-	Set(msg *Message.Message, c Currency)
+type Repository interface {
+	Insert(msg *models.Message)
+	GetTotalAmount(update tgbotapi.Update) int
 }
-*/
 
-type client struct {
-	bot      *tgbotapi.BotAPI
+/*
+	type Cache interface {
+		Get(msg *models.Message) (int, bool)
+		Set(msg *models.Message, c Currency)
+	}
+*/
+type BotClient struct {
+	Bot      *tgbotapi.BotAPI
 	cache    pkg.Cache
 	currency Currency
+	conn     Repository
 }
 
-func NewTgBot(cfg *config.TgBotConfig, cache pkg.Cache, currency Currency) *client {
+func NewTgBot(cfg *config.TgBotConfig, cache pkg.Cache, currency Currency, rep Repository) *BotClient {
 
 	tgBot, err := tgbotapi.NewBotAPI(cfg.Key)
 	if err != nil {
@@ -44,82 +46,62 @@ func NewTgBot(cfg *config.TgBotConfig, cache pkg.Cache, currency Currency) *clie
 
 	log.Println("Authorization was successful")
 
-	return &client{
-		bot:      tgBot,
+	return &BotClient{
+		Bot:      tgBot,
 		cache:    cache,
 		currency: currency,
+		conn:     rep,
 	}
 }
 
-func (c *client) Run() {
-	c.bot.Debug = true
+func (c *BotClient) Send(update tgbotapi.Update, resp string) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, resp)
+	if _, sendError := c.Bot.Send(msg); sendError != nil {
+		log.Println(fmt.Errorf("send message failed: %v", sendError))
+	}
+}
+
+func (c *BotClient) Run() {
+	c.Bot.Debug = true
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 
-	updates := c.bot.GetUpdatesChan(updateConfig)
+	updates := c.Bot.GetUpdatesChan(updateConfig)
 
 	for update := range updates {
 
-		wordList := strings.Split(update.Message.Text, " ")
-
-		if !validateMessageText(wordList) {
-
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
-			if _, sendError := c.bot.Send(msg); sendError != nil {
-				log.Println(fmt.Errorf("send message failed: %v", sendError))
-			}
-
+		if update.Message.Text == "Итог" {
+			fmt.Println(c.conn.GetTotalAmount(update))
+			c.Send(update, fmt.Sprintf("Сумма ваших трат за месяц: %d", c.conn.GetTotalAmount(update)))
 			continue
 		}
 
-		msg := stringParser(wordList)
+		models := models.NewMessage(update)
 
-		if _, ok := c.cache.Get(msg); !ok {
-			c.cache.Set(msg, c.currency)
+		if !models.ValidateMessage() {
+			c.Send(update, "Невалидная строка. Строка должна быть следующего вида: Продукты 1000Rub")
+			continue
 		}
 
-		val, _ := c.cache.Get(msg)
+		models = models.ParseNewMessage()
 
-		msg = msg.SetSumRub(val)
-
-		ans := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("%s, сумма вашей покупки составила: %d, в следующей валюте: %s. Сумма в рублях - %d . Категория покупки - %s ", update.Message.From.UserName, msg.Sum, msg.Cur, msg.SumRub/100, msg.Category))
-		if _, sendError := c.bot.Send(ans); sendError != nil {
-			log.Panic(fmt.Errorf("send message failed: %v", sendError))
+		if _, ok := c.cache.Get(models); !ok {
+			c.cache.Set(models, c.currency)
 		}
 
+		val, _ := c.cache.Get(models)
+
+		models = models.SetSumRub(val)
+
+		fmt.Println(models)
+
+		c.conn.Insert(models)
+
+		c.Send(update, models.ResponseFormation())
+
 	}
 }
 
-func (c *client) Stop() {
-	c.bot.StopReceivingUpdates()
-}
-
-func validateMessageText(wordList []string) bool {
-
-	if len(wordList) != 2 {
-		return false
-	}
-	if matched, _ := regexp.MatchString("[0-9]", wordList[1]); matched != true {
-		return false
-	}
-	if matched, _ := regexp.MatchString("[A-z]", wordList[1]); matched != true {
-		return false
-	}
-	return true
-}
-
-var re, _ = regexp.Compile("[A-z]")
-
-func stringParser(wordList []string) *Message.Message {
-
-	listInd := re.FindStringIndex(wordList[1])
-	i := listInd[0]
-
-	sum, _ := strconv.Atoi(wordList[1][:i])
-
-	return &Message.Message{
-		Category: wordList[0],
-		Sum:      sum,
-		Cur:      wordList[1][i:],
-	}
+func (c *BotClient) Stop() {
+	c.Bot.StopReceivingUpdates()
 }

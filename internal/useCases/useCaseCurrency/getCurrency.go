@@ -1,7 +1,9 @@
-package useCases
+package useCaseCurrency
 
 import (
 	"sync"
+
+	"github.com/MaxKut3/BudgetBot/internal/useCases/provider"
 
 	"github.com/MaxKut3/BudgetBot/config"
 )
@@ -21,17 +23,22 @@ func NewCurrencyStr(cfg *config.TgBotConfig) *currencyStr {
 }
 
 func (c *currencyStr) GetValue(cur string) int {
-	max := 0
 	ch := make(chan int)
 
 	var wg sync.WaitGroup
 	wg.Add(len(c.Cfg.Providers))
 
-	for key, provider := range c.Cfg.Providers {
+	max := 0
+
+	for url, key := range c.Cfg.Providers {
+
+		prov := provider.NewProvider(url, cur, key)
 
 		go func() {
 			defer wg.Done()
-			ch <- provider(cur, key)
+
+			ch <- provider.Sender(prov)
+
 		}()
 	}
 	go func() {
@@ -40,6 +47,7 @@ func (c *currencyStr) GetValue(cur string) int {
 	}()
 
 	for v := range ch {
+
 		if v > max {
 			max = v
 		}

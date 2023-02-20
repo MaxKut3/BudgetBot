@@ -1,9 +1,10 @@
 package pkg
 
 import (
+	"sync"
 	"time"
 
-	"github.com/MaxKut3/BudgetBot/internal/Message"
+	"github.com/MaxKut3/BudgetBot/internal/models"
 )
 
 type Currency interface {
@@ -11,8 +12,8 @@ type Currency interface {
 }
 
 type Cache interface {
-	Get(msg *Message.Message) (int, bool)
-	Set(msg *Message.Message, c Currency)
+	Get(msg *models.Message) (int, bool)
+	Set(msg *models.Message, c Currency)
 }
 
 type structCache struct {
@@ -22,6 +23,7 @@ type structCache struct {
 
 type simpleCache struct {
 	cache map[string]structCache
+	mu    sync.RWMutex
 }
 
 func NewSimpleCache() *simpleCache {
@@ -30,7 +32,7 @@ func NewSimpleCache() *simpleCache {
 	}
 }
 
-func (s *simpleCache) Get(msg *Message.Message) (int, bool) {
+func (s *simpleCache) Get(msg *models.Message) (int, bool) {
 	c, ok := s.cache[msg.Cur]
 	if !ok {
 		return 0, ok
@@ -38,7 +40,7 @@ func (s *simpleCache) Get(msg *Message.Message) (int, bool) {
 	return c.val, ok
 }
 
-func (s *simpleCache) Set(msg *Message.Message, c Currency) {
+func (s *simpleCache) Set(msg *models.Message, c Currency) {
 	s.cache[msg.Cur] = structCache{
 		val:  c.GetValue(msg.Cur),
 		time: time.Now(),
